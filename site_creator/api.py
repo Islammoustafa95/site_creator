@@ -1,9 +1,9 @@
-# site_creator/site_creator/api.py
 import frappe
 import os
 import requests
 from datetime import datetime, timedelta
 from frappe.utils import random_string
+import time
 
 @frappe.whitelist(allow_guest=True)
 def create_site(subdomain, plan, email):
@@ -34,13 +34,23 @@ def create_site(subdomain, plan, email):
         # Create DNS record
         create_cloudflare_record(subdomain)
 
-        # Create bench site
-        os.system(f"bench new-site {site_name} --admin-password {admin_password}")
+        # Get MySQL root password from common_site_config.json
+        mysql_password = frappe.conf.get('mysql_root_password')
+        if not mysql_password:
+            frappe.throw("MySQL root password not configured")
+
+        # Create bench site with MySQL password
+        os.system(f"bench new-site {site_name} --admin-password {admin_password} --mariadb-root-password {mysql_password}")
 
         # Install apps based on plan
         plan_doc = frappe.get_doc("Subscription Plan", plan)
         for app in plan_doc.apps:
+            # Install each app individually
             os.system(f"bench --site {site_name} install-app {app.app_name}")
+            # Run migrations after each app installation
+            os.system(f"bench --site {site_name} migrate")
+            # Add a small delay between installations
+            time.sleep(2)
 
         # Configure domain and nginx
         os.system(f"bench setup add-domain {site_name}")
