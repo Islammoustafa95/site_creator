@@ -8,6 +8,7 @@ from frappe.utils import random_string
 
 @frappe.whitelist(allow_guest=True)
 def create_site(subdomain, plan, email):
+    site = None  # Initialize site variable
     try:
         # Validate subdomain
         if frappe.db.exists("Site Subscription", {"subdomain": subdomain}):
@@ -23,7 +24,7 @@ def create_site(subdomain, plan, email):
             "expiry_date": (datetime.now() + timedelta(days=30)).date(),
             "status": "Pending"
         })
-        site.insert()
+        site.insert(ignore_permissions=True)
 
         # Send initial email
         send_creation_started_email(email, subdomain)
@@ -82,8 +83,9 @@ def create_site(subdomain, plan, email):
 
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Site Creation Error")
-        site.status = "Failed"
-        site.save()
+        if site:  # Check if site exists before updating
+            site.status = "Failed"
+            site.save(ignore_permissions=True)
         return {"status": "error", "message": str(e)}
 
 def create_cloudflare_record(subdomain):

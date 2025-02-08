@@ -1,56 +1,21 @@
-// apps/site_creator/site_creator/public/js/site_subscription.js
-
 frappe.ui.form.on('Site Subscription', {
     refresh: function(frm) {
-        if(frm.doc.__islocal) {
-            frm.add_custom_button(__('Create Site'), function() {
-                if (!frm.doc.subdomain || !frm.doc.plan || !frm.doc.email) {
-                    frappe.msgprint(__('Please fill in all required fields'));
-                    return;
+        frm.add_custom_button(__('Create Site'), function() {
+            frappe.call({
+                method: 'site_creator.api.create_site',
+                args: {
+                    subdomain: frm.doc.subdomain,
+                    plan: frm.doc.plan,
+                    email: frm.doc.email
+                },
+                callback: function(r) {
+                    if (r.message && r.message.status === "success") {
+                        frappe.msgprint("Site creation started successfully");
+                    } else {
+                        frappe.msgprint(r.message.message || "Error creating site");
+                    }
                 }
-
-                // First save the form
-                frm.save('Submit', () => {
-                    // After saving, call the create_site method
-                    frappe.call({
-                        method: 'site_creator.api.create_site',
-                        args: {
-                            subdomain: frm.doc.subdomain,
-                            plan: frm.doc.plan,
-                            email: frm.doc.email
-                        },
-                        freeze: true,
-                        freeze_message: __('Creating site...'),
-                        callback: function(r) {
-                            if (r.message && r.message.status === "success") {
-                                frappe.show_alert({
-                                    message: __("Site creation initiated. You will receive an email shortly."),
-                                    indicator: 'green'
-                                });
-                                frm.reload_doc();
-                            } else {
-                                frappe.show_alert({
-                                    message: __(r.message.message || "Error creating site"),
-                                    indicator: 'red'
-                                });
-                            }
-                        }
-                    });
-                });
-            }).addClass('btn-primary');
-        }
-    },
-    
-    // Add validation before save
-    before_save: function(frm) {
-        if (!frm.doc.creation_date) {
-            frm.set_value('creation_date', frappe.datetime.get_today());
-        }
-        if (!frm.doc.expiry_date) {
-            frm.set_value('expiry_date', frappe.datetime.add_days(frm.doc.creation_date, 30));
-        }
-        if (!frm.doc.status) {
-            frm.set_value('status', 'Pending');
-        }
+            });
+        });
     }
 });
