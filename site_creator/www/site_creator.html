@@ -24,23 +24,23 @@
 </div>
 
 <script>
-function createSite() {
-    frappe.call({
-        method: 'site_creator.site_creator.api.create_site',
-        args: {
-            subdomain: $('#subdomain').val(),
-            plan: $('#plan').val(),
-            email: $('#email').val()
-        },
-        callback: function(r) {
-            if (r.message.status === 'success') {
-                frappe.show_alert('Site creation started. Check your email for updates.');
-                window.location.href = '/my-sites';
-            } else {
-                frappe.throw(r.message.message);
+    function createSite() {
+        frappe.call({
+            method: 'site_creator.api.create_site',  // Changed this line
+            args: {
+                subdomain: $('#subdomain').val(),
+                plan: $('#plan').val(),
+                email: $('#email').val()
+            },
+            callback: function(r) {
+                if (r.message.status === 'success') {
+                    frappe.show_alert('Site creation started. Check your email for updates.');
+                    window.location.href = '/my-sites';
+                } else {
+                    frappe.throw(r.message.message);
+                }
             }
-        }
-    });
-}
-</script>
+        });
+    }
+    </script>
 {% endblock %}
