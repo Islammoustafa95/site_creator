@@ -67,6 +67,7 @@
     "name": "Site Subscription",
     "name_case": "Title Case",
     "owner": "Administrator",
+    "is_submittable": 1,
     "permissions": [
         {
             "create": 1,
@@ -78,7 +79,10 @@
             "report": 1,
             "role": "System Manager",
             "share": 1,
-            "write": 1
+            "submit": 1,
+            "write": 1,
+            "cancel": 1,
+            "amend": 1
         }
     ],
     "sort_field": "modified",
