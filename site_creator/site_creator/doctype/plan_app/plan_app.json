@@ -5,11 +5,7 @@
     "doctype": "DocType",
     "engine": "InnoDB",
     "field_order": [
-        "app_name",
-        "parent",
-        "parenttype",
-        "parentfield",
-        "idx"
+        "app_name"
     ],
     "fields": [
         {
@@ -18,26 +14,6 @@
             "in_list_view": 1,
             "label": "App Name",
             "reqd": 1
-        },
-        {
-            "fieldname": "parent",
-            "fieldtype": "Data",
-            "hidden": 1
-        },
-        {
-            "fieldname": "parenttype",
-            "fieldtype": "Data",
-            "hidden": 1
-        },
-        {
-            "fieldname": "parentfield",
-            "fieldtype": "Data",
-            "hidden": 1
-        },
-        {
-            "fieldname": "idx",
-            "fieldtype": "Int",
-            "hidden": 1
         }
     ],
     "index_web_pages_for_search": 1,
