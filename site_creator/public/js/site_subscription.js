@@ -1,3 +1,5 @@
+// apps/site_creator/site_creator/public/js/site_subscription.js
+
 frappe.ui.form.on('Site Subscription', {
     refresh: function(frm) {
         if(frm.doc.__islocal) {
@@ -7,6 +9,8 @@ frappe.ui.form.on('Site Subscription', {
                     return;
                 }
 
+                // Changed the method path here from 'site_creator.site_creator.api.create_site'
+                // to 'site_creator.api.create_site'
                 frappe.call({
                     method: 'site_creator.api.create_site',
                     args: {
