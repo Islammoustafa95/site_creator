@@ -1,7 +1,6 @@
 {
     "actions": [],
     "allow_rename": 1,
-    "autoname": "field:subdomain",
     "creation": "2024-02-08 12:00:00.000000",
     "doctype": "DocType",
     "engine": "InnoDB",
@@ -10,14 +9,13 @@
         "plan",
         "email",
         "creation_date",
-        "expiry_date",
-        "status"
+        "status",
+        "site_creation_log"
     ],
     "fields": [
         {
             "fieldname": "subdomain",
             "fieldtype": "Data",
-            "in_list_view": 1,
             "label": "Subdomain",
             "reqd": 1,
             "unique": 1
@@ -25,67 +23,52 @@
         {
             "fieldname": "plan",
             "fieldtype": "Link",
-            "in_list_view": 1,
-            "label": "Subscription Plan",
+            "label": "Plan",
             "options": "Subscription Plan",
             "reqd": 1
         },
         {
             "fieldname": "email",
             "fieldtype": "Data",
-            "in_list_view": 1,
             "label": "Email",
             "options": "Email",
             "reqd": 1
         },
         {
             "fieldname": "creation_date",
-            "fieldtype": "Date",
-            "label": "Creation Date",
-            "reqd": 1
-        },
-        {
-            "fieldname": "expiry_date",
-            "fieldtype": "Date",
-            "label": "Expiry Date",
-            "reqd": 1
+            "fieldtype": "Datetime",
+            "label": "Creation Date"
         },
         {
             "default": "Pending",
             "fieldname": "status",
             "fieldtype": "Select",
-            "in_list_view": 1,
             "label": "Status",
-            "options": "Pending\nActive\nExpired"
+            "options": "Pending\nIn Progress\nCompleted\nFailed"
+        },
+        {
+            "fieldname": "site_creation_log",
+            "fieldtype": "Long Text",
+            "label": "Site Creation Log",
+            "read_only": 1
         }
     ],
-    "index_web_pages_for_search": 1,
-    "links": [],
     "modified": "2024-02-08 12:00:00.000000",
-    "modified_by": "Administrator",
     "module": "Site Creator",
     "name": "Site Subscription",
-    "name_case": "Title Case",
     "owner": "Administrator",
-    "is_submittable": 1,
     "permissions": [
         {
             "create": 1,
             "delete": 1,
             "email": 1,
-            "export": 1,
             "print": 1,
             "read": 1,
-            "report": 1,
             "role": "System Manager",
             "share": 1,
-            "submit": 1,
-            "write": 1,
-            "cancel": 1,
-            "amend": 1
+            "write": 1
         }
     ],
     "sort_field": "modified",
-    "sort_order": "DESC",
-    "states": []
+    "sort_order": "DESC"
 }

@@ -1,136 +1,171 @@
-# site_creator/site_creator/api.py
 import frappe
 import os
-import requests
 import subprocess
-from datetime import datetime, timedelta
-from frappe.utils import random_string
+import requests
+from datetime import datetime
+import random
+import string
+from frappe.utils import get_site_name
 
-@frappe.whitelist(allow_guest=True)
-def create_site(subdomain, plan, email):
-    site = None  # Initialize site variable
+def create_cloudflare_record(subdomain):
     try:
-        # Validate subdomain
-        if frappe.db.exists("Site Subscription", {"subdomain": subdomain}):
-            frappe.throw("Subdomain already exists")
+        api_token = frappe.conf.get("cloudflare_api_token")
+        zone_id = frappe.conf.get("cloudflare_zone_id")
+        server_ip = frappe.conf.get("server_ip")
 
-        # Create site subscription
-        site = frappe.get_doc({
+        if not all([api_token, zone_id, server_ip]):
+            raise Exception("Cloudflare configuration missing in common_site_config.json")
+
+        headers = {
+            "Authorization": f"Bearer {api_token}",
+            "Content-Type": "application/json"
+        }
+
+        data = {
+            "type": "A",
+            "name": subdomain,
+            "content": server_ip,
+            "proxied": True
+        }
+
+        response = requests.post(
+            f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
+            headers=headers,
+            json=data
+        )
+
+        if not response.ok:
+            raise Exception(f"Cloudflare API error: {response.text}")
+
+        return True
+
+    except Exception as e:
+        raise Exception(f"Failed to create Cloudflare DNS record: {str(e)}")
+
+@frappe.whitelist()
+def create_site(subdomain, plan, email):
+    subscription = None
+    try:
+        site_name = f"{subdomain}.ventotech.co"
+
+        # Check if subdomain exists in Site Subscription
+        if frappe.db.exists("Site Subscription", {"subdomain": subdomain}):
+            raise Exception("Subdomain already exists")
+
+        # Create Cloudflare DNS record first
+        create_cloudflare_record(subdomain)
+
+        # Create subscription record
+        subscription = frappe.get_doc({
             "doctype": "Site Subscription",
             "subdomain": subdomain,
             "plan": plan,
             "email": email,
-            "creation_date": datetime.now().date(),
-            "expiry_date": (datetime.now() + timedelta(days=30)).date(),
-            "status": "Pending"
+            "creation_date": datetime.now(),
+            "status": "In Progress",
+            "site_creation_log": "DNS Record created successfully. Starting site creation..."
         })
-        site.insert(ignore_permissions=True)
+        subscription.insert(ignore_permissions=True)
 
-        # Send initial email
-        send_creation_started_email(email, subdomain)
+        # Generate random admin password
+        admin_password = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
 
-        # Create site
-        admin_password = random_string(16)
-        site_name = f"{subdomain}.ventotech.co"
-
-        # Create DNS record
-        create_cloudflare_record(subdomain)
-
-        # Get MySQL root password from common_site_config.json
+        # Get MySQL password
         mysql_password = frappe.conf.get('mysql_root_password')
         if not mysql_password:
-            frappe.throw("MySQL root password not configured")
+            raise Exception("MySQL root password not configured in common_site_config.json")
 
-        # Get apps from plan
-        plan_doc = frappe.get_doc("Subscription Plan", plan)
-        apps_to_install = [app.app_name for app in plan_doc.apps]
+        # Determine which script to run
+        script_path = "/home/frappe/plan1.sh" if plan == "Plan 1" else "/home/frappe/plan2.sh"
 
-        # Construct the installation command chain
-        installation_command = f"bench new-site {site_name} --admin-password {admin_password} --mariadb-root-password {mysql_password}"
-
-        # Add each app installation and migration to the command chain
-        for app in apps_to_install:
-            installation_command += f" && bench --site {site_name} install-app {app}"
-            installation_command += f" && bench --site {site_name} migrate"
-
-        # Execute the complete installation command
+        # Run the script
         process = subprocess.Popen(
-            installation_command,
+            [script_path, site_name, admin_password, mysql_password, email],
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            shell=True
+            stderr=subprocess.PIPE
         )
-        output, error = process.communicate()
 
-        if process.returncode != 0:
-            error_msg = error.decode('utf-8') if error else "Unknown error"
-            frappe.log_error(f"Installation failed: {error_msg}", "Site Creation Error")
-            raise Exception(f"Site creation failed: {error_msg}")
+        def update_log():
+            try:
+                log_file = f"/home/frappe/site_creation_logs/{site_name}_creation.log"
+                if os.path.exists(log_file):
+                    with open(log_file, 'r') as f:
+                        current_log = f.read()
+                        subscription.site_creation_log = current_log
 
-        # Configure domain and nginx
-        os.system(f"bench setup add-domain {site_name}")
-        os.system("bench setup nginx --yes")
-        os.system("bench setup reload-nginx")
+                        if "SUCCESS" in current_log:
+                            subscription.status = "Completed"
+                            # Send success email
+                            send_completion_email(email, site_name, admin_password)
+                        elif "FAILED" in current_log:
+                            subscription.status = "Failed"
+                            # Send failure email
+                            send_failure_email(email, site_name)
 
-        # Update status
-        site.status = "Active"
-        site.save()
+                        subscription.save()
+            except Exception as e:
+                frappe.log_error(f"Log update error: {str(e)}", "Site Creation Log Update Error")
 
-        # Send completion email
-        send_creation_complete_email(email, subdomain, admin_password)
+        # Schedule log updates
+        frappe.enqueue(
+            update_log,
+            queue='long',
+            timeout=3600
+        )
 
-        return {"status": "success", "message": "Site created successfully"}
+        return {
+            "status": "success",
+            "message": "Site creation initiated",
+            "subscription_name": subscription.name
+        }
 
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Site Creation Error")
-        if site:  # Check if site exists before updating
-            site.status = "Failed"
-            site.save(ignore_permissions=True)
+        if subscription:
+            subscription.status = "Failed"
+            subscription.site_creation_log += f"\nError: {str(e)}"
+            subscription.save()
         return {"status": "error", "message": str(e)}
 
-def create_cloudflare_record(subdomain):
-    api_token = frappe.conf.get("cloudflare_api_token")
-    zone_id = frappe.conf.get("cloudflare_zone_id")
+def send_completion_email(email, site_name, admin_password):
+    try:
+        frappe.sendmail(
+            recipients=[email],
+            subject=f"Your site {site_name} is ready!",
+            message=f"""
+            Hello,
 
-    headers = {
-        "Authorization": f"Bearer {api_token}",
-        "Content-Type": "application/json"
-    }
+            Your new site has been created successfully!
 
-    data = {
-        "type": "A",
-        "name": subdomain,
-        "content": frappe.conf.get("server_ip"),
-        "proxied": True
-    }
+            Site URL: https://{site_name}
+            Username: administrator
+            Password: {admin_password}
 
-    response = requests.post(
-        f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records",
-        headers=headers,
-        json=data
-    )
+            Please change your password after first login.
 
-    if not response.ok:
-        frappe.throw("Failed to create DNS record")
+            Best regards,
+            Your Site Creation Team
+            """
+        )
+    except Exception as e:
+        frappe.log_error(f"Email sending error: {str(e)}", "Site Creation Email Error")
 
-def send_creation_started_email(email, subdomain):
-    frappe.sendmail(
-        recipients=[email],
-        subject="Site Creation Started",
-        message=f"Your site {subdomain}.ventotech.co is being created. We'll notify you once it's ready."
-    )
+def send_failure_email(email, site_name):
+    try:
+        frappe.sendmail(
+            recipients=[email],
+            subject=f"Site creation failed for {site_name}",
+            message=f"""
+            Hello,
 
-def send_creation_complete_email(email, subdomain, password):
-    frappe.sendmail(
-        recipients=[email],
-        subject="Site Creation Complete",
-        message=f"""
-        Your site has been created successfully!
+            Unfortunately, we encountered an error while creating your site {site_name}.
+            Our team has been notified and will investigate the issue.
 
-        URL: https://{subdomain}.ventotech.co
-        Username: administrator
-        Password: {password}
+            We will contact you once we have more information.
 
-        Please change your password after first login.
-        """
-    )
+            Best regards,
+            Your Site Creation Team
+            """
+        )
+    except Exception as e:
+        frappe.log_error(f"Email sending error: {str(e)}", "Site Creation Email Error")
