@@ -1,0 +1,46 @@
+{% extends "templates/web.html" %}
+
+{% block page_content %}
+<div class="container">
+    <h1>Create New Site</h1>
+    <div class="form-group">
+        <label>Select Plan</label>
+        <select class="form-control" id="plan">
+            {% for plan in plans %}
+            <option value="{{ plan.name }}">{{ plan.plan_name }} - ${{ plan.price }}/month</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-group">
+        <label>Subdomain</label>
+        <input type="text" class="form-control" id="subdomain" placeholder="yoursite">
+        <small>.ventotech.co</small>
+    </div>
+    <div class="form-group">
+        <label>Email</label>
+        <input type="email" class="form-control" id="email">
+    </div>
+    <button class="btn btn-primary" onclick="createSite()">Create Site</button>
+</div>
+
+<script>
+function createSite() {
+    frappe.call({
+        method: 'site_creator.site_creator.api.create_site',
+        args: {
+            subdomain: $('#subdomain').val(),
+            plan: $('#plan').val(),
+            email: $('#email').val()
+        },
+        callback: function(r) {
+            if (r.message.status === 'success') {
+                frappe.show_alert('Site creation started. Check your email for updates.');
+                window.location.href = '/my-sites';
+            } else {
+                frappe.throw(r.message.message);
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "templates/web.html" %}
+
+{% block page_content %}
+<div class="container">
+    <h1>My Sites</h1>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Subdomain</th>
+                <th>Plan</th>
+                <th>Creation Date</th>
+                <th>Expiry Date</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for site in sites %}
+            <tr>
+                <td>{{ site.subdomain }}.yourdomain.com</td>
+                <td>{{ site.plan }}</td>
+                <td>{{ site.creation_date }}</td>
+                <td>{{ site.expiry_date }}</td>
+                <td>{{ site.status }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
