@@ -76,7 +76,7 @@ def create_site(subdomain, plan, email):
             raise Exception("MySQL root password not configured in common_site_config.json")
 
         # Determine which script to run
-        script_path = "/home/frappe/plan1.sh" if plan == "Plan 1" else "/home/frappe/plan2.sh"
+        script_path = "/home/frappe/frappe-bench/plan1.sh" if plan == "Plan 1" else "/home/frappe/frappe-bench/plan2.sh"
 
         # Run the script
         process = subprocess.Popen(
