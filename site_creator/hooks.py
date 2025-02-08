@@ -7,7 +7,7 @@ app_license = "mit"
 
 # Correct JavaScript path
 doctype_js = {
-    "Site Subscription": "site_creator/public/js/site_subscription.js"
+    "Site Subscription": "public/js/site_subscription.js"
 }
 
 api_version = 1
