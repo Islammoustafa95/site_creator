@@ -3,7 +3,6 @@ import frappe
 import os
 import requests
 import subprocess
-import time
 from datetime import datetime, timedelta
 from frappe.utils import random_string
 
@@ -41,73 +40,36 @@ def create_site(subdomain, plan, email):
         if not mysql_password:
             frappe.throw("MySQL root password not configured")
 
-        # Create bench site with MySQL password
-        run_command(f"bench new-site {site_name} --admin-password {admin_password} --mariadb-root-password {mysql_password}")
-
-        # Install apps based on plan
+        # Get apps from plan
         plan_doc = frappe.get_doc("Subscription Plan", plan)
+        apps_to_install = [app.app_name for app in plan_doc.apps]
 
-        for app in plan_doc.apps:
-            frappe.log_error(f"Starting installation of {app.app_name}", "App Installation Status")
+        # Construct the installation command chain
+        installation_command = f"bench new-site {site_name} --admin-password {admin_password} --mariadb-root-password {mysql_password}"
 
-            # Check if app is already installed
-            installed_apps = get_installed_apps(site_name)
-            if app.app_name in installed_apps:
-                frappe.log_error(f"{app.app_name} is already installed", "App Installation Status")
-                continue
+        # Add each app installation and migration to the command chain
+        for app in apps_to_install:
+            installation_command += f" && bench --site {site_name} install-app {app}"
+            installation_command += f" && bench --site {site_name} migrate"
 
-            # Install app with retries
-            retries = 3
-            success = False
+        # Execute the complete installation command
+        process = subprocess.Popen(
+            installation_command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=True
+        )
+        output, error = process.communicate()
 
-            for attempt in range(retries):
-                # Install the app
-                returncode, output, error = run_command(f"bench --site {site_name} install-app {app.app_name}")
-
-                if returncode == 0:
-                    # Verify installation
-                    installed_apps = get_installed_apps(site_name)
-                    if app.app_name in installed_apps:
-                        success = True
-                        frappe.log_error(f"Successfully installed {app.app_name}", "App Installation Status")
-                        break
-                    else:
-                        frappe.log_error(f"App {app.app_name} installation completed but not found in installed apps",
-                                       "App Installation Error")
-                else:
-                    error_msg = error.decode('utf-8') if error else "Unknown error"
-                    frappe.log_error(f"Attempt {attempt + 1}: Failed to install {app.app_name}: {error_msg}",
-                                   "App Installation Error")
-
-                # Wait before retry
-                time.sleep(30)
-
-            if not success:
-                raise Exception(f"Failed to install {app.app_name} after {retries} attempts")
-
-            # Run migrations for the site
-            returncode, output, error = run_command(f"bench --site {site_name} migrate")
-            if returncode != 0:
-                error_msg = error.decode('utf-8') if error else "Unknown error"
-                raise Exception(f"Migration failed for {app.app_name}: {error_msg}")
-
-            # Clear cache
-            run_command(f"bench --site {site_name} clear-cache")
-
-            # Wait before next app
-            time.sleep(60)
-
-        # Verify all required apps are installed
-        final_installed_apps = get_installed_apps(site_name)
-        missing_apps = [app.app_name for app in plan_doc.apps if app.app_name not in final_installed_apps]
-
-        if missing_apps:
-            raise Exception(f"Some apps failed to install: {', '.join(missing_apps)}")
+        if process.returncode != 0:
+            error_msg = error.decode('utf-8') if error else "Unknown error"
+            frappe.log_error(f"Installation failed: {error_msg}", "Site Creation Error")
+            raise Exception(f"Site creation failed: {error_msg}")
 
         # Configure domain and nginx
-        run_command(f"bench setup add-domain {site_name}")
-        run_command("bench setup nginx --yes")
-        run_command("bench setup reload-nginx")
+        os.system(f"bench setup add-domain {site_name}")
+        os.system("bench setup nginx --yes")
+        os.system("bench setup reload-nginx")
 
         # Update status
         site.status = "Active"
@@ -123,26 +85,6 @@ def create_site(subdomain, plan, email):
         site.status = "Failed"
         site.save()
         return {"status": "error", "message": str(e)}
-
-def run_command(command):
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        shell=True
-    )
-    output, error = process.communicate()
-    return process.returncode, output, error
-
-def get_installed_apps(site_name):
-    returncode, output, error = run_command(f"bench --site {site_name} list-apps")
-    if returncode == 0:
-        # Convert bytes to string and split into lines
-        apps_output = output.decode('utf-8').strip().split('\n')
-        # Remove empty strings and whitespace
-        installed_apps = [app.strip() for app in apps_output if app.strip()]
-        return installed_apps
-    return []
 
 def create_cloudflare_record(subdomain):
     api_token = frappe.conf.get("cloudflare_api_token")
